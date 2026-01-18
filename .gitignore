@@ -1,0 +1,82 @@
+# Sensitive Configuration Files - NEVER COMMIT THESE
+configuration.json
+config.json
+secrets.json
+*.env
+.env
+.env.local
+
+# API Credentials
+*api_key*
+*api_secret*
+*credentials*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+ftenv/
+
+# Testing
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+*.log
+.hypothesis/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Fivetran Specific
+files/
+warehouse.db/
+.ft_sdk_connector_tester/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Local test data
+test_data/
+sample_data/
+mock_data/
+
+# Logs
+*.log
+logs/
