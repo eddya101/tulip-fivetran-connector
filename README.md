@@ -1,29 +1,51 @@
-# Tulip Tables Fivetran Connector
+# Tulip Connector Example
 
-A Python-based Fivetran Source Connector to sync Tulip Table data into your data warehouse (Snowflake, BigQuery, Redshift, etc.).
+This connector syncs data from Tulip Tables to Fivetran destinations. Tulip is a frontline operations platform that enables manufacturers to build apps without code, connect machines and devices, and analyze data to improve operations. This connector allows you to replicate Tulip Table data into your data warehouse for analysis and reporting.
 
-## Overview
+## Connector overview
 
-This connector enables automated data pipelines from Tulip Tables to your data warehouse with:
+This connector provides incremental data replication from Tulip Tables using the Tulip Table API. It supports:
 
-- 🔄 **Incremental sync** - Only syncs new/updated records with 60-second lookback
-- 📊 **Dynamic schema discovery** - Automatically maps Tulip fields to warehouse columns
-- 🎯 **Custom filtering** - Apply filters to sync only relevant records
-- 🏢 **Workspace support** - Works with workspace-specific tables
-- ⚡ **Efficient pagination** - Handles large datasets with automatic checkpointing
-- 🛡️ **Production-ready** - Rate limiting, error handling, and retry logic
+- Dynamic schema discovery that automatically maps Tulip field types to warehouse column types
+- Incremental sync based on the `_updatedAt` timestamp field with a 60-second lookback window to prevent data loss
+- Custom filtering using Tulip API filter syntax to sync only relevant records
+- Workspace-scoped table access for multi-tenant Tulip instances
+- Automatic pagination with checkpointing every 500 records for resumable syncs
+- Exponential backoff retry logic for rate limiting and transient errors
 
-## Quick Start
+The connector is designed for manufacturing operations teams who need to analyze production data, track quality metrics, and monitor operational performance across their data warehouse ecosystem.
 
-### 1. Create Configuration
+## Requirements
 
-Create a `configuration.json` file (⚠️ never commit this file):
+- [Supported Python versions](https://github.com/fivetran/fivetran_connector_sdk/blob/main/README.md#requirements)
+- Operating system:
+  - Windows: 10 or later (64-bit only)
+  - macOS: 13 (Ventura) or later (Apple Silicon [arm64] or Intel [x86_64])
+  - Linux: Distributions such as Ubuntu 20.04 or later, Debian 10 or later, or Amazon Linux 2 or later (arm64 or x86_64)
+
+## Getting started
+
+Refer to the [Connector SDK Setup Guide](https://fivetran.com/docs/connectors/connector-sdk/setup-guide) to get started.
+
+## Features
+
+- Incremental sync: Uses `_updatedAt` timestamp field to sync only new or modified records
+- Schema discovery: Automatically detects table schema and maps Tulip data types to Fivetran types
+- Custom filtering: Supports Tulip API filter syntax for conditional data replication
+- Workspace support: Can sync tables from workspace-scoped or instance-level endpoints
+- Human-readable columns: Generates descriptive column names from field labels and IDs
+- Checkpointing: Saves state every 500 records for resumable syncs
+- Error handling: Implements exponential backoff retry logic for rate limiting and transient failures
+
+## Configuration file
+
+The connector requires the following configuration keys in `configuration.json`:
 
 ```json
 {
   "subdomain": "yourcompany",
-  "api_key": "your_api_key_here",
-  "api_secret": "your_api_secret_here",
+  "api_key": "apikey.2_KWBF636uT2fQEKjHX",
+  "api_secret": "WZq4kFmSiPOHYv6czMmTGG__kjfAJGyn--fR-tZZkcm",
   "table_id": "T65jBaGMgiexWy5yS",
   "workspace_id": "n65jTTAeR8St6nX6k",
   "sync_from_date": "2025-01-01T00:00:00Z",
@@ -31,304 +53,121 @@ Create a `configuration.json` file (⚠️ never commit this file):
 }
 ```
 
-### 2. Test Locally
+Configuration parameters:
 
-```bash
-# Install Fivetran SDK
-pip install fivetran-connector-sdk
+- `subdomain` (required) - Your Tulip instance subdomain (e.g., "acme" for acme.tulip.co)
+- `api_key` (required) - Tulip API key obtained from Bot settings in Tulip
+- `api_secret` (required) - Tulip API secret corresponding to the API key
+- `table_id` (required) - Unique identifier of the Tulip table to sync (e.g., "T65jBaGMgiexWy5yS")
+- `workspace_id` (optional) - Workspace ID for workspace-scoped tables (omit for instance-level tables)
+- `sync_from_date` (optional) - ISO 8601 timestamp to start initial sync (defaults to beginning of time if omitted)
+- `custom_filter_json` (optional) - JSON array of Tulip API filter objects (defaults to empty array if omitted)
 
-# Test the connector
-fivetran debug --configuration configuration.json
-```
+Note: Ensure that the `configuration.json` file is not checked into version control to protect sensitive information.
 
-### 3. Deploy to Fivetran
+## Requirements file
 
-```bash
-fivetran deploy \
-  --api-key YOUR_FIVETRAN_API_KEY \
-  --destination Snowflake \
-  --connection tulip_table_sync
-```
+This connector does not require any additional Python packages beyond those pre-installed in the Fivetran environment. The `requirements.txt` file should be left empty.
 
-See [TULIP_INTEGRATION_GUIDE.md](TULIP_INTEGRATION_GUIDE.md) for complete setup instructions.
+Note: The `fivetran_connector_sdk:latest` and `requests:latest` packages are pre-installed in the Fivetran environment. To avoid dependency conflicts, do not declare them in your `requirements.txt`.
 
-## Configuration Parameters
+## Authentication
 
-### Required
+Authentication - Refer to `def schema()` and `def update()`
 
-| Parameter | Description | Example |
-|-----------|-------------|---------|
-| `subdomain` | Your Tulip instance subdomain | `acme` |
-| `api_key` | Tulip API key from Bot settings | `apikey.2_KWBF...` |
-| `api_secret` | Tulip API secret from Bot settings | `WZq4kFmSi...` |
-| `table_id` | UID of the Tulip table to sync | `T65jBaGMgiexWy5yS` |
+This connector uses HTTP Basic Authentication with Tulip API credentials:
 
-### Optional
+1. Log into your Tulip instance.
+2. Navigate to **Shop Floor** > **Bots**.
+3. Create a new bot or select an existing bot.
+4. Copy the **API Key** and **API Secret** from the bot configuration.
+5. Ensure the bot has appropriate permissions to access the target table.
 
-| Parameter | Description | Example | Default |
-|-----------|-------------|---------|---------|
-| `workspace_id` | Workspace ID for workspace-specific tables | `n65jTTAeR8St6nX6k` | `null` |
-| `sync_from_date` | ISO-8601 timestamp for initial sync | `2025-01-01T00:00:00Z` | Start of time |
-| `custom_filter_json` | JSON array of Tulip API filter objects | `[{"field":"status","functionType":"equal","arg":"active"}]` | `[]` |
+The connector passes the API key and secret as HTTP Basic Auth credentials to all Tulip API endpoints.
 
-## Features
+## Pagination
 
-### Schema Discovery
+Pagination - Refer to `def update()`
 
-The connector automatically:
-- Discovers all fields in your Tulip Table
-- Maps Tulip data types to warehouse-compatible types
-- Sets `id` as the primary key
-- Includes system fields (`_createdAt`, `_updatedAt`, etc.)
+The connector implements offset-based pagination to handle large datasets:
 
-**Type Mapping:**
+- Fetches records in batches of 100 (configurable via `__DEFAULT_LIMIT` constant)
+- Uses `offset` and `limit` query parameters in API requests
+- Sorts results by `_updatedAt` timestamp in ascending order to ensure consistent ordering
+- Continues pagination until fewer records than the limit are returned
+- Checkpoints state every 500 records to enable resumable syncs
 
-| Tulip Type | Warehouse Type |
-|------------|----------------|
-| `integer` | `INT` |
-| `float` | `DOUBLE` |
-| `boolean` | `BOOLEAN` |
-| `timestamp`, `datetime` | `UTC_DATETIME` |
-| Others | `STRING` |
+## Data handling
 
-### Incremental Sync
+Data handling - Refer to `def schema()`, `def _map_tulip_type_to_fivetran()`, `def generate_column_name()`, and `def _transform_record()`
 
-- Tracks the last synced record using `_updatedAt` timestamp
-- Applies 60-second lookback to ensure no records are missed
-- Checkpoints every 500 records for resumable syncs
+The connector transforms Tulip Table data through several stages:
 
-### Custom Filters
+1. Schema discovery:
+   - Fetches table metadata from Tulip API
+   - Maps Tulip data types to Fivetran types using `_map_tulip_type_to_fivetran()`
+   - Generates human-readable column names from field labels and IDs
+   - Includes system fields: `id` (primary key), `_createdAt`, `_updatedAt`
 
-Apply Tulip API filters to sync only specific records:
+2. Type mapping:
+   - `integer` maps to `INT`
+   - `float` maps to `DOUBLE`
+   - `boolean` maps to `BOOLEAN`
+   - `timestamp` and `datetime` map to `UTC_DATETIME`
+   - `interval` maps to `INT` (stored as seconds)
+   - `user` maps to `STRING`
+   - All other types default to `STRING`
 
-```json
-[
-  {"field": "status", "functionType": "equal", "arg": "active"},
-  {"field": "priority", "functionType": "greaterThan", "arg": 5}
-]
-```
+3. Record transformation:
+   - Transforms field IDs to human-readable column names using `generate_column_name()`
+   - Column naming format: `label__id` (e.g., `customer_name__rqoqm`)
+   - Normalizes labels: lowercase, replaces spaces with underscores, removes special characters
+   - Preserves system fields in their original format
 
-Available filter functions: `equal`, `notEqual`, `greaterThan`, `lessThan`, `contains`, `startsWith`, `blank`, `isIn`, and more.
+4. Incremental sync:
+   - Filters records by `_updatedAt > last_cursor`
+   - Applies 60-second lookback to prevent data loss from concurrent updates
+   - Updates cursor after each record is processed
 
-## Development
+## Error handling
 
-### Prerequisites
+Error handling - Refer to `def _fetch_with_retry()`
 
-- Python 3.9+
-- Virtual environment (recommended)
-- Fivetran Connector SDK
+The connector implements robust error handling:
 
-### Setup
+- Rate limiting: Detects HTTP 429 responses and retries with exponential backoff (5s, 10s, 20s)
+- Request failures: Automatically retries transient errors up to 3 attempts
+- Specific exception handling: Catches and logs `KeyError`, `json.JSONDecodeError`, `requests.exceptions.HTTPError`
+- Structured logging: Uses Python logging module with appropriate levels (INFO, WARNING, ERROR, CRITICAL)
+- State preservation: Checkpoints every 500 records to minimize data loss on failure
 
-```bash
-# Clone the repository
-git clone <repository-url>
-cd tulip-fivetran-connector
+## Tables created
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+The connector creates a single table per Tulip Table synced. The table name is generated from the Tulip table label and ID in the format `label__id`.
 
-# Install development dependencies
-pip install -r requirements-dev.txt
-```
-
-### Running Tests
+Example table schema for a Tulip table named "BioTechKitsDummy":
 
-```bash
-# Run all tests
-python -m pytest test_connector.py -v
+Table: `biotechkitsdummy__t65jbagmgiexwy5ys`
 
-# Run with coverage report
-python -m pytest test_connector.py -v --cov=connector --cov-report=html
+System columns (always present):
+- `id` (STRING, primary key) - Unique record identifier
+- `_createdAt` (UTC_DATETIME) - Record creation timestamp
+- `_updatedAt` (UTC_DATETIME) - Record last update timestamp
 
-# Run specific test class
-python -m pytest test_connector.py::TestSchemaDiscovery -v
-
-# Run specific test
-python -m pytest test_connector.py::TestUpdate::test_update_pagination -v
-```
-
-**Test Coverage: 100%** ✅
+Custom columns are generated based on the Tulip table schema and follow the naming pattern `fieldlabel__fieldid`. For example:
+- `customer_name__rqoqm` (STRING)
+- `kit_number__pxwol` (INT)
+- `kit_start_datetime__rzkek_kit_start_date_time` (UTC_DATETIME)
+- `spectrapath_data_success__pybts_spectra_path_data_success` (BOOLEAN)
 
-The test suite includes 15 tests covering:
-- ✅ Schema discovery with/without workspace
-- ✅ Initial and incremental syncs
-- ✅ Pagination and checkpointing
-- ✅ Rate limiting and error handling
-- ✅ Custom filters and edge cases
+The schema is automatically discovered on the first sync and updated when new fields are added to the Tulip table.
 
-### Local Testing with Real Data
+## Additional files
 
-```bash
-# Create your configuration file
-cp configuration.example.json configuration.json
-# Edit configuration.json with your credentials
+- `test_connector.py` - Comprehensive test suite with 15 tests covering schema discovery, incremental sync, pagination, error handling, and custom filters
+- `DEVELOPMENT_GUIDE.md` - Development environment setup instructions and debugging workflow
+- `TULIP_INTEGRATION_GUIDE.md` - End-to-end integration guide for setting up Tulip with Fivetran and Snowflake
 
-# Test the connector
-fivetran debug --configuration configuration.json
+## Additional considerations
 
-# You should see output like:
-# INFO: Fetching schema from https://yourcompany.tulip.co/api/v3/...
-# INFO: Starting sync from cursor: 2025-01-01T00:00:00Z
-# INFO: Fivetran-Tester-Process: SYNC SUCCEEDED
-```
-
-## Project Structure
-
-```
-tulip-fivetran-connector/
-├── connector.py              # Main connector implementation
-├── test_connector.py         # Comprehensive test suite
-├── requirements.txt          # Production dependencies (empty - SDK provides all)
-├── requirements-dev.txt      # Development dependencies (pytest, coverage)
-├── README.md                 # This file
-├── TULIP_INTEGRATION_GUIDE.md # Complete integration guide
-├── configuration.json        # Your config (gitignored)
-└── .gitignore               # Excludes sensitive files
-```
-
-## Deployment
-
-### Deploy to Fivetran
-
-1. **Get Fivetran API Key:**
-   - Log into Fivetran
-   - Navigate to Settings > API Config
-   - Generate an API key
-
-2. **Deploy the connector:**
-   ```bash
-   fivetran deploy \
-     --api-key YOUR_FIVETRAN_API_KEY \
-     --destination Snowflake \
-     --connection tulip_table_sync
-   ```
-
-3. **Configure in Fivetran UI:**
-   - Go to Connectors > Your Connector
-   - Enter configuration parameters
-   - Set sync schedule
-   - Run initial sync
-
-See [Fivetran Connector SDK Documentation](https://fivetran.com/docs/connector-sdk) for detailed deployment instructions.
-
-## Monitoring
-
-### Key Metrics
-
-Monitor these metrics in the Fivetran dashboard:
-- **Sync Success Rate** - Should be near 100%
-- **Records Synced** - Compare with Tulip Table row count
-- **Sync Duration** - Track performance over time
-- **Data Freshness** - Check `_updatedAt` in your warehouse
-
-### Logs
-
-Enable debug logging in Fivetran:
-1. Navigate to your connector
-2. Go to Setup > Logs
-3. Set log level to Debug
-4. Run manual sync and review
-
-## Troubleshooting
-
-### Common Issues
-
-**Authentication Error (401)**
-- Verify API key and secret are correct
-- Check bot has permissions to access the table
-- Ensure bot is enabled in Tulip
-
-**Table Not Found (404)**
-- Verify table ID is correct
-- If using workspace table, ensure workspace ID is provided
-- Check table exists in your Tulip instance
-
-**Rate Limiting (429)**
-- Connector automatically retries after 5 seconds
-- If persistent, reduce sync frequency or contact Tulip support
-
-**Schema Changes**
-- New fields are automatically detected on next sync
-- New columns added to warehouse table
-- Historical records have NULL for new fields
-
-For more troubleshooting guidance, see [TULIP_INTEGRATION_GUIDE.md](TULIP_INTEGRATION_GUIDE.md#troubleshooting).
-
-## Documentation
-
-- **[Integration Guide](TULIP_INTEGRATION_GUIDE.md)** - Complete setup guide for Tulip + Fivetran + Snowflake
-- **[Tulip API Docs](https://support.tulip.co/docs/api-documentation)** - Tulip API reference
-- **[Tulip Table API](https://support.tulip.co/docs/table-api-guide)** - Table-specific API documentation
-- **[Fivetran SDK Docs](https://fivetran.com/docs/connector-sdk)** - Fivetran Connector SDK reference
-
-## Contributing
-
-Contributions are welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Add tests for new functionality
-4. Ensure all tests pass (100% coverage)
-5. Submit a pull request
-
-## Security
-
-⚠️ **Never commit sensitive information:**
-- Keep `configuration.json` out of version control (it's in `.gitignore`)
-- Rotate API credentials regularly
-- Use Fivetran's secrets management in production
-- Follow least-privilege principles for bot permissions
-
-## Support
-
-- **Issues:** Open an issue in this repository
-- **Tulip Community:** [community.tulip.co](https://community.tulip.co/)
-- **Fivetran Support:** [support.fivetran.com](https://support.fivetran.com/)
-
-## License
-
-[Add your license here]
-
-## Changelog
-
-### v1.0.0 (January 2026)
-- ✅ Initial release
-- ✅ Schema discovery with dynamic type mapping
-- ✅ Incremental sync with 60-second lookback
-- ✅ Custom filter support
-- ✅ Workspace-specific table support
-- ✅ Automatic pagination and checkpointing (every 500 records)
-- ✅ Rate limiting handling
-- ✅ 100% test coverage with 15 tests
-- ✅ Complete integration guide
-
-## Roadmap / TODO
-
-### Planned Enhancements
-
-- [ ] **Fix column labels/IDs** - Use human-readable column names instead of field IDs
-- [ ] **Fix table name/label/ID** - Use table label for warehouse table name instead of table ID
-- [ ] **Multi-table version** - Support syncing multiple Tulip Tables in a single connector instance
-- [ ] **Soft delete support** - Handle deleted records in Tulip Tables
-- [ ] **Performance optimization** - Batch upserts for improved throughput
-- [ ] **Advanced filtering UI** - Visual filter builder for easier configuration
-- [ ] **Data validation** - Optional schema validation and data quality checks
-- [ ] **Metrics tracking** - Built-in performance and data quality metrics
-
-### Future Considerations
-
-- Support for Tulip Analytics Records
-- Change Data Capture (CDC) mode
-- Bi-directional sync capabilities
-- Custom transformation support
-
-## Authors
-
-[Add author information]
-
----
-
-**Version:** 1.0.0
-**Last Updated:** January 2026
-**Compatibility:** Tulip API v3, Fivetran Connector SDK 2.0+
+The examples provided are intended to help you effectively use Fivetran's Connector SDK. While we've tested the code, Fivetran cannot be held responsible for any unexpected or negative consequences that may arise from using these examples. For inquiries, please reach out to our Support team.
