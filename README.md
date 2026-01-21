@@ -43,11 +43,11 @@ The connector requires the following configuration keys in `configuration.json`:
 
 ```json
 {
-  "subdomain": "yourcompany",
-  "api_key": "apikey.2_KWBF636uT2fQEKjHX",
-  "api_secret": "WZq4kFmSiPOHYv6czMmTGG__kjfAJGyn--fR-tZZkcm",
-  "table_id": "T65jBaGMgiexWy5yS",
-  "workspace_id": "n65jTTAeR8St6nX6k",
+  "subdomain": "",
+  "api_key": "",
+  "api_secret": "",
+  "table_id": "",
+  "workspace_id": "",
   "sync_from_date": "2025-01-01T00:00:00Z",
   "custom_filter_json": "[]"
 }
