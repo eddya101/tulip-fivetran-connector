@@ -9,6 +9,7 @@ import json
 import logging
 import re
 import time
+import threading
 
 import requests
 from fivetran_connector_sdk import Connector
@@ -28,6 +29,54 @@ __CHECKPOINT_INTERVAL = 500
 __RATE_LIMIT_RETRY_BASE_SECONDS = 5
 __MAX_RETRY_ATTEMPTS = 3
 __CURSOR_OVERLAP_SECONDS = 60
+__RATE_LIMIT_REQUESTS_PER_SECOND = 50  # Tulip API rate limit
+
+
+class RateLimiter:
+    """Token bucket rate limiter for API requests.
+
+    Implements a token bucket algorithm to limit requests to a specified rate.
+    Tulip API allows 50 requests per second.
+    """
+
+    def __init__(self, requests_per_second):
+        """Initialize rate limiter.
+
+        Args:
+            requests_per_second (int): Maximum number of requests allowed per second.
+        """
+        self.rate = requests_per_second
+        self.min_interval = 1.0 / requests_per_second
+        self.last_request_time = None
+        self.lock = threading.Lock()
+
+    def acquire(self):
+        """Acquire permission to make a request.
+
+        Blocks if necessary to maintain the rate limit using a fixed-window approach
+        to ensure we never exceed the specified requests per second.
+        """
+        with self.lock:
+            now = time.time()
+
+            # Allow first request immediately
+            if self.last_request_time is None:
+                self.last_request_time = now
+                return
+
+            time_since_last = now - self.last_request_time
+
+            # If not enough time has passed, sleep
+            if time_since_last < self.min_interval:
+                sleep_time = self.min_interval - time_since_last
+                time.sleep(sleep_time)
+
+            # Update last request time
+            self.last_request_time = time.time()
+
+
+# Global rate limiter instance
+_rate_limiter = RateLimiter(__RATE_LIMIT_REQUESTS_PER_SECOND)
 
 
 def generate_column_name(field_id, field_label=None):
@@ -199,6 +248,8 @@ def schema(configuration):
 def _fetch_with_retry(url, auth, params=None, max_retries=__MAX_RETRY_ATTEMPTS):
     """Fetch data from API with exponential backoff retry logic.
 
+    Applies rate limiting before each request to comply with Tulip API limits.
+
     Args:
         url (str): API endpoint URL.
         auth (tuple): Authentication tuple (api_key, api_secret).
@@ -213,6 +264,9 @@ def _fetch_with_retry(url, auth, params=None, max_retries=__MAX_RETRY_ATTEMPTS):
     """
     for attempt in range(max_retries):
         try:
+            # Apply rate limiting before making the request
+            _rate_limiter.acquire()
+
             response = requests.get(url, auth=auth, params=params)
 
             if response.status_code == 429:
@@ -354,8 +408,13 @@ def update(configuration, state):
         has_more = True
         records_processed = 0
 
+        # Keep the filter cursor fixed during pagination
+        filter_cursor = cursor
+        # Track the latest timestamp for checkpointing
+        latest_timestamp = cursor
+
         while has_more:
-            api_filters = [{"field": "_updatedAt", "functionType": "greaterThan", "arg": cursor}] if cursor else []
+            api_filters = [{"field": "_updatedAt", "functionType": "greaterThan", "arg": filter_cursor}] if filter_cursor else []
             api_filters.extend(custom_filters)
 
             params = {
@@ -374,11 +433,13 @@ def update(configuration, state):
             for record in records:
                 transformed_record = _transform_record(record, field_mapping)
                 op.upsert(table=table_name, data=transformed_record)
-                cursor = record.get('_updatedAt') or record.get('updatedAt')
+
+                # Track the latest timestamp but don't update filter cursor
+                latest_timestamp = record.get('_updatedAt') or record.get('updatedAt')
                 records_processed += 1
 
                 if records_processed % __CHECKPOINT_INTERVAL == 0:
-                    op.checkpoint(state={'last_updated_at': cursor})
+                    op.checkpoint(state={'last_updated_at': latest_timestamp})
                     logger.info(f"Checkpointed at {records_processed} records")
 
             if len(records) < __DEFAULT_LIMIT:
@@ -386,8 +447,8 @@ def update(configuration, state):
             else:
                 offset += __DEFAULT_LIMIT
 
-        if cursor:
-            op.checkpoint(state={'last_updated_at': cursor})
+        if latest_timestamp:
+            op.checkpoint(state={'last_updated_at': latest_timestamp})
             logger.info(f"Sync completed. Total records processed: {records_processed}")
 
     except KeyError as e:
