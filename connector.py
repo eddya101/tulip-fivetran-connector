@@ -164,8 +164,10 @@ def validate_configuration(configuration):
     Raises:
         ValueError: If configuration is invalid or missing required fields.
     """
-    if not isinstance(configuration, dict):
-        raise ValueError("Configuration must be a dictionary")
+    if configuration is None:
+        raise ValueError("Configuration cannot be None")
+    if not hasattr(configuration, "__getitem__"):
+        raise ValueError("Configuration must be a dictionary-like object")
 
     # Required fields
     required_fields = ["subdomain", "api_key", "api_secret", "table_id"]
